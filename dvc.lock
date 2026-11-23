@@ -51,6 +51,10 @@ stages:
       hash: md5
       md5: fcd2b9788423450f500b4b6ac266b992
       size: 1701
+    - path: src/mlops_project/versioning.py
+      hash: md5
+      md5: 23a017eb74a61c2de808f474d3632a7c
+      size: 2644
     params:
       params.yaml:
         random_seed: 42
@@ -68,7 +72,7 @@ stages:
       size: 7697
     - path: models/run.json
       hash: md5
-      md5: ef7a5a47f5eeb218b77c055bf23553a5
+      md5: 9acdf9a8edb48f017e27fa771b12ec91
       size: 82
   evaluate:
     cmd: uv run python src/main.py evaluate
@@ -83,7 +87,7 @@ stages:
       size: 7697
     - path: models/run.json
       hash: md5
-      md5: ef7a5a47f5eeb218b77c055bf23553a5
+      md5: 9acdf9a8edb48f017e27fa771b12ec91
       size: 82
     - path: src/mlops_project/model.py
       hash: md5
