@@ -11,7 +11,7 @@ train:
   # logistic regression
   C: 1.0
   max_iter: 1000
-  class_weight: none      # none | balanced
+  class_weight: balanced  # none | balanced
   # random forest
   n_estimators: 200
   max_depth: 8
