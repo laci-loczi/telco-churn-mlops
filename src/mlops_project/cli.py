@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from .config import load_settings
 
@@ -118,7 +119,17 @@ COMMANDS = {
 }
 
 
+def _utf8_console() -> None:
+    """MLflow prints emoji; a default Windows console (cp1252) crashes on them."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> None:
+    _utf8_console()
     parser = argparse.ArgumentParser(prog="mlops-project", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=sorted(COMMANDS))

@@ -1,0 +1,100 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+    - path: data/telco_churn.csv
+      hash: md5
+      md5: 537887dfef07762153d506a52efb847f
+      size: 690380
+    - path: src/mlops_project/config.py
+      hash: md5
+      md5: 5f55aeba9ada206eac292ef021935290
+      size: 3592
+    - path: src/mlops_project/data.py
+      hash: md5
+      md5: ae2556af8a6cd21554ed8027cebfcc24
+      size: 2956
+    - path: src/mlops_project/pipeline.py
+      hash: md5
+      md5: 07533a5913d060a697d96d5904fb9a14
+      size: 6086
+    params:
+      params.yaml:
+        prepare.test_size: 0.25
+        random_seed: 42
+    outs:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: ea4a9e68a826b7c4871911a934c78e82
+      size: 157356
+    - path: data/processed/train.csv
+      hash: md5
+      md5: afc645d292ea58bcc138fa1bf0bcc4e0
+      size: 472969
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+    - path: data/processed/train.csv
+      hash: md5
+      md5: afc645d292ea58bcc138fa1bf0bcc4e0
+      size: 472969
+    - path: src/mlops_project/model.py
+      hash: md5
+      md5: 58e66315d0bbf129e90901dc5bfefa68
+      size: 2706
+    - path: src/mlops_project/pipeline.py
+      hash: md5
+      md5: 07533a5913d060a697d96d5904fb9a14
+      size: 6086
+    - path: src/mlops_project/tracking.py
+      hash: md5
+      md5: fcd2b9788423450f500b4b6ac266b992
+      size: 1701
+    params:
+      params.yaml:
+        random_seed: 42
+        train:
+          family: logreg
+          C: 1.0
+          max_iter: 1000
+          class_weight: none
+          n_estimators: 200
+          max_depth: 8
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: a351f8be12813239b75e10d38ba03ada
+      size: 7681
+    - path: models/run.json
+      hash: md5
+      md5: 8852f44cd6ff45257c3050af8aff2633
+      size: 82
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: ea4a9e68a826b7c4871911a934c78e82
+      size: 157356
+    - path: models/model.joblib
+      hash: md5
+      md5: a351f8be12813239b75e10d38ba03ada
+      size: 7681
+    - path: models/run.json
+      hash: md5
+      md5: 8852f44cd6ff45257c3050af8aff2633
+      size: 82
+    - path: src/mlops_project/model.py
+      hash: md5
+      md5: 58e66315d0bbf129e90901dc5bfefa68
+      size: 2706
+    - path: src/mlops_project/pipeline.py
+      hash: md5
+      md5: 07533a5913d060a697d96d5904fb9a14
+      size: 6086
+    outs:
+    - path: metrics/metrics.json
+      hash: md5
+      md5: 4c9e61dade926c154c6a00709928b56e
+      size: 104
