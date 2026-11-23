@@ -24,6 +24,7 @@ stages:
       - src/mlops_project/model.py
       - src/mlops_project/pipeline.py
       - src/mlops_project/tracking.py
+      - src/mlops_project/versioning.py
     params:
       - random_seed
       - train

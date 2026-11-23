@@ -52,8 +52,20 @@ def git_commit(project_root: Path) -> str | None:
     return result.stdout.strip() or None if result.returncode == 0 else None
 
 
+# Files `dvc repro` itself rewrites while the pipeline runs. They are outputs of
+# this run, not inputs, so a change to them does not make the run's code dirty.
+PIPELINE_OUTPUTS = ("dvc.lock", "metrics", "models")
+
+
 def git_dirty(project_root: Path) -> bool:
-    """True when tracked files differ from HEAD (untracked files are ignored)."""
-    result = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
-                            cwd=project_root, capture_output=True, text=True, check=False)
+    """True when tracked inputs (code, params, pointers) differ from HEAD.
+
+    Without the exclusions every run inside `dvc repro` reads as dirty: DVC
+    updates the tracked dvc.lock after each stage, before `train` starts.
+    """
+    excludes = [f":(exclude){path}" for path in PIPELINE_OUTPUTS]
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no", "--", ".", *excludes],
+        cwd=project_root, capture_output=True, text=True, check=False,
+    )
     return bool(result.stdout.strip())
