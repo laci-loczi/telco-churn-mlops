@@ -1,19 +1,24 @@
 import pytest
 
-from mlops_project.config import Settings, _validate
+from mlops_project.config import Settings, load_params, validate_params
 
 
-def test_defaults():
-    s = Settings()
-    assert s.problem_type == "classification"
-    assert 0.0 < s.test_size < 1.0
+def test_defaults_use_the_56xx_ports():
+    assert Settings().mlflow_tracking_uri.endswith(":5600")
 
 
-def test_invalid_problem_type_rejected():
+def test_committed_params_are_valid():
+    params = load_params(Settings())
+    assert params["train"]["family"] in ("logreg", "random_forest")
+
+
+@pytest.mark.parametrize("bad", [
+    {"prepare": {"test_size": 1.5}},
+    {"train": {"family": "svm"}},
+    {"train": {"C": 0}},
+    {"train": {"max_iter": -1}},
+    {"train": {"class_weight": "auto"}},
+])
+def test_invalid_params_are_rejected(bad):
     with pytest.raises(ValueError):
-        _validate(Settings(problem_type="clustering"))
-
-
-def test_invalid_test_size_rejected():
-    with pytest.raises(ValueError):
-        _validate(Settings(test_size=1.5))
+        validate_params(bad)

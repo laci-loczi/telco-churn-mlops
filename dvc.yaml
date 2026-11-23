@@ -1,0 +1,47 @@
+# prepare -> train -> evaluate. Every cmd also runs by hand.
+# Source files are deps, so editing the code makes the right stage stale; only
+# the params keys a stage really reads are listed, so changing train.C re-runs
+# train + evaluate but not prepare.
+stages:
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/telco_churn.csv
+      - src/mlops_project/data.py
+      - src/mlops_project/pipeline.py
+      - src/mlops_project/config.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/mlops_project/model.py
+      - src/mlops_project/pipeline.py
+      - src/mlops_project/tracking.py
+    params:
+      - random_seed
+      - train
+    outs:
+      - models/model.joblib
+      # Committed (cache: false): the MLflow run id is the link from the
+      # pipeline to the tracking server, and evaluate needs it.
+      - models/run.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - data/processed/test.csv
+      - models/model.joblib
+      - models/run.json
+      - src/mlops_project/model.py
+      - src/mlops_project/pipeline.py
+    metrics:
+      - metrics/metrics.json:
+          cache: false

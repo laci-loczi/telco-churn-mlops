@@ -1,0 +1,6 @@
+# Force LF everywhere. DVC 3 hashes raw bytes: a committed `cache: false` output
+# (metrics/metrics.json, models/run.json) checked out with CRLF on Windows gets a
+# different md5 than the one in dvc.lock, and `dvc repro` would re-run stages on a
+# fresh clone even though nothing changed.
+* text=auto eol=lf
+*.joblib binary

@@ -1,0 +1,17 @@
+# Hyperparameters and pipeline settings. DVC hashes this file per key, so a
+# change here makes exactly the stages that declare that key stale.
+
+random_seed: 42
+
+prepare:
+  test_size: 0.25
+
+train:
+  family: logreg          # logreg | random_forest
+  # logistic regression
+  C: 1.0
+  max_iter: 1000
+  class_weight: none      # none | balanced
+  # random forest
+  n_estimators: 200
+  max_depth: 8

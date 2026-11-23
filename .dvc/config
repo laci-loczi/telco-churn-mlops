@@ -1,0 +1,7 @@
+[core]
+    autostage = true
+    analytics = false
+    remote = storage
+['remote "storage"']
+    url = s3://dvc-storage/dvcstore
+    endpointurl = http://127.0.0.1:5610
