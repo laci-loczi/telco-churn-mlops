@@ -5,8 +5,8 @@ stages:
     deps:
     - path: data/telco_churn.csv
       hash: md5
-      md5: 537887dfef07762153d506a52efb847f
-      size: 690380
+      md5: 3b0bfab28a8101b4e4fdd08025a5c235
+      size: 970457
     - path: src/mlops_project/config.py
       hash: md5
       md5: 5f55aeba9ada206eac292ef021935290
@@ -26,19 +26,19 @@ stages:
     outs:
     - path: data/processed/test.csv
       hash: md5
-      md5: ea4a9e68a826b7c4871911a934c78e82
-      size: 157356
+      md5: 73b9f48d1673f358aae0c1587230cb66
+      size: 221337
     - path: data/processed/train.csv
       hash: md5
-      md5: afc645d292ea58bcc138fa1bf0bcc4e0
-      size: 472969
+      md5: 131d2d138b5d72c611960f4dab93eb92
+      size: 664427
   train:
     cmd: uv run python src/main.py train
     deps:
     - path: data/processed/train.csv
       hash: md5
-      md5: afc645d292ea58bcc138fa1bf0bcc4e0
-      size: 472969
+      md5: 131d2d138b5d72c611960f4dab93eb92
+      size: 664427
     - path: src/mlops_project/model.py
       hash: md5
       md5: 58e66315d0bbf129e90901dc5bfefa68
@@ -64,26 +64,26 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: a351f8be12813239b75e10d38ba03ada
+      md5: a26779d4450df39a66afa6ccae9cf8a1
       size: 7681
     - path: models/run.json
       hash: md5
-      md5: 8852f44cd6ff45257c3050af8aff2633
+      md5: b4d1eaf24e8fd732da44f79259564ec6
       size: 82
   evaluate:
     cmd: uv run python src/main.py evaluate
     deps:
     - path: data/processed/test.csv
       hash: md5
-      md5: ea4a9e68a826b7c4871911a934c78e82
-      size: 157356
+      md5: 73b9f48d1673f358aae0c1587230cb66
+      size: 221337
     - path: models/model.joblib
       hash: md5
-      md5: a351f8be12813239b75e10d38ba03ada
+      md5: a26779d4450df39a66afa6ccae9cf8a1
       size: 7681
     - path: models/run.json
       hash: md5
-      md5: 8852f44cd6ff45257c3050af8aff2633
+      md5: b4d1eaf24e8fd732da44f79259564ec6
       size: 82
     - path: src/mlops_project/model.py
       hash: md5
@@ -96,5 +96,5 @@ stages:
     outs:
     - path: metrics/metrics.json
       hash: md5
-      md5: 4c9e61dade926c154c6a00709928b56e
-      size: 104
+      md5: b7ff11a909f0c05108feba31894a91cf
+      size: 105
