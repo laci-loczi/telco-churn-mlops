@@ -58,17 +58,17 @@ stages:
           family: logreg
           C: 1.0
           max_iter: 1000
-          class_weight: none
+          class_weight: balanced
           n_estimators: 200
           max_depth: 8
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: a26779d4450df39a66afa6ccae9cf8a1
-      size: 7681
+      md5: 4b26c695c4fc23a13b21a95f695101a2
+      size: 7697
     - path: models/run.json
       hash: md5
-      md5: b4d1eaf24e8fd732da44f79259564ec6
+      md5: ef7a5a47f5eeb218b77c055bf23553a5
       size: 82
   evaluate:
     cmd: uv run python src/main.py evaluate
@@ -79,11 +79,11 @@ stages:
       size: 221337
     - path: models/model.joblib
       hash: md5
-      md5: a26779d4450df39a66afa6ccae9cf8a1
-      size: 7681
+      md5: 4b26c695c4fc23a13b21a95f695101a2
+      size: 7697
     - path: models/run.json
       hash: md5
-      md5: b4d1eaf24e8fd732da44f79259564ec6
+      md5: ef7a5a47f5eeb218b77c055bf23553a5
       size: 82
     - path: src/mlops_project/model.py
       hash: md5
@@ -96,5 +96,5 @@ stages:
     outs:
     - path: metrics/metrics.json
       hash: md5
-      md5: b7ff11a909f0c05108feba31894a91cf
+      md5: 7de303a16ab6b9d7d17af5a4f6469251
       size: 105
