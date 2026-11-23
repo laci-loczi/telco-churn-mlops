@@ -1,12 +1,18 @@
 # data/
 
-Put your project dataset here (e.g. `data/dataset.csv`) and set `DATA_PATH` in
-`.env`. Until then, `uv run python src/main.py` will tell you the file is
-missing — that's expected. The tests run on synthetic data, so `pytest` is green
-without a dataset.
+| Path | In Git? | What |
+| --- | --- | --- |
+| `telco_churn.csv.dvc` | yes | DVC pointer: the md5 and size of the dataset version in use |
+| `telco_churn.csv` | no (DVC) | the dataset. Get it with `uv run dvc pull` |
+| `processed/` | no (DVC) | train/test split written by the `prepare` stage |
+| `source/` | no (ignored) | the raw IBM download, only needed to rebuild a version |
 
-You may commit the CSV here for now if its size and license allow. From **HW1
-(Week 5)** you will version it with **DVC + MinIO** instead of committing it to
-git — at that point this folder holds a `.dvc` pointer, not the raw file.
+Rebuild a dataset version from the IBM source (downloaded on first use):
 
-Document your data in `docs/DATA_DICTIONARY.md` before you start building.
+```bash
+uv run python src/main.py make-data --version 1   # first 5,000 customers
+uv run python src/main.py make-data --version 2   # all 7,043 customers
+uv run dvc add data/telco_churn.csv
+```
+
+The documentation for the columns is in [../docs/DATA_DICTIONARY.md](../docs/DATA_DICTIONARY.md).
