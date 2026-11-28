@@ -1,13 +1,35 @@
-# prepare -> train -> evaluate. Every cmd also runs by hand.
+# validate -> prepare -> train -> evaluate -> gate. Every cmd also runs by hand.
 # Source files are deps, so editing the code makes the right stage stale; only
 # the params keys a stage really reads are listed, so changing train.C re-runs
-# train + evaluate but not prepare.
+# train + evaluate + gate but not validate or prepare.
+#
+# The two gates are different shapes:
+#   validate is UPSTREAM: prepare depends on reports/validation.json, and
+#            validate exits non-zero on a contract failure, so on bad data the
+#            work never happens.
+#   gate     is at the END: it exits non-zero on a NO-GO (dvc repro fails), and
+#            `register` refuses unless reports/gate.json is a GO for this run.
+#            It never deletes the model: the artifact is the evidence.
 stages:
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/telco_churn.csv
+      - src/mlops_project/schemas.py
+      - src/mlops_project/validation.py
+      - src/mlops_project/data.py
+    outs:
+      - reports/validation.json:
+          cache: false
+
   prepare:
     cmd: uv run python src/main.py prepare
     deps:
       - data/telco_churn.csv
+      - reports/validation.json          # <- the data gate
       - src/mlops_project/data.py
+      - src/mlops_project/schemas.py
+      - src/mlops_project/validation.py
       - src/mlops_project/pipeline.py
       - src/mlops_project/config.py
     params:
@@ -43,6 +65,27 @@ stages:
       - models/run.json
       - src/mlops_project/model.py
       - src/mlops_project/pipeline.py
+      - src/mlops_project/evaluation.py
+    params:
+      - evaluation
+      - acceptance.slice_rules        # min_support for the fairness gaps
     metrics:
       - metrics/metrics.json:
+          cache: false
+      - metrics/slices.json:
+          cache: false
+
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+      - metrics/metrics.json
+      - metrics/slices.json
+      - metrics/baseline.json
+      - models/run.json
+      - src/mlops_project/gates.py
+      - src/mlops_project/pipeline.py
+    params:
+      - acceptance
+    outs:
+      - reports/gate.json:
           cache: false

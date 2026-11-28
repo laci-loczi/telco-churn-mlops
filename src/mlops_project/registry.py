@@ -7,18 +7,45 @@ import json
 from .config import Settings
 
 
+class PublishRefused(RuntimeError):
+    """The recorded gate verdict does not allow publishing this model."""
+
+
+def publish_decision(gate_report: dict | None, run_id: str | None) -> tuple[bool, str]:
+    """May the model of `run_id` be published? A pure function, tested directly.
+
+    Only a GO recorded for THIS run counts: a GO left over from an earlier run
+    says nothing about the model now in models/.
+    """
+    if not run_id:
+        return False, "models/run.json has no run_id (was MLflow up during `dvc repro`?)"
+    if gate_report is None:
+        return False, "no recorded verdict (reports/gate.json missing) — run `dvc repro`"
+    if gate_report.get("run_id") != run_id:
+        return False, (f"reports/gate.json is for run {gate_report.get('run_id')}, not the "
+                       f"current model {run_id} — run `dvc repro`")
+    if gate_report.get("verdict") != "GO":
+        reasons = "; ".join(gate_report.get("reasons", [])) or "unknown"
+        return False, f"gate verdict is {gate_report.get('verdict')}: {reasons}"
+    return True, f"gate GO (criteria {gate_report.get('criteria_version')})"
+
+
 def register(settings: Settings) -> dict:
     """Register `runs:/<run_id>/model` from models/run.json and point the alias at it.
 
-    Registering from the run URI is what populates the version's `run_id` — the
-    link from the registry back to the run.
+    Refuses (PublishRefused) unless reports/gate.json is a GO for this run. The
+    check comes before any registry call, so a refused model never gets a version.
+    Registering from the run URI is what populates the version's `run_id`.
     """
     import mlflow
     from mlflow.tracking import MlflowClient
 
     run_id = json.loads(settings.run_info_path.read_text(encoding="utf-8")).get("run_id")
-    if not run_id:
-        raise RuntimeError("models/run.json has no run_id — run `dvc repro` with MLflow up first.")
+    gate_report = (json.loads(settings.gate_path.read_text(encoding="utf-8"))
+                   if settings.gate_path.exists() else None)
+    allowed, reason = publish_decision(gate_report, run_id)
+    if not allowed:
+        raise PublishRefused(f"refusing to register: {reason}")
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     client = MlflowClient(settings.mlflow_tracking_uri)
@@ -32,7 +59,29 @@ def register(settings: Settings) -> dict:
                                       version.version)
     return {"name": settings.registered_model_name, "version": version.version,
             "alias": settings.model_alias, "run_id": version.run_id,
-            "already_registered": bool(existing)}
+            "already_registered": bool(existing), "reason": reason}
+
+
+def refresh_baseline(settings: Settings) -> dict:
+    """Write metrics/baseline.json from the model the ALIAS points at (not a version).
+
+    No timestamp: the file is committed and must only change when the champion does.
+    """
+    from mlflow.tracking import MlflowClient
+
+    from .pipeline import _write_json
+
+    client = MlflowClient(settings.mlflow_tracking_uri)
+    version = client.get_model_version_by_alias(settings.registered_model_name,
+                                                settings.model_alias)
+    run = client.get_run(version.run_id)
+    baseline = {
+        "source": {"model": settings.registered_model_name, "alias": settings.model_alias,
+                   "version": str(version.version), "run_id": version.run_id},
+        "metrics": {k: round(float(v), 4) for k, v in sorted(run.data.metrics.items())},
+    }
+    _write_json(settings.baseline_path, baseline)
+    return baseline
 
 
 def chain(settings: Settings) -> dict:

@@ -64,6 +64,23 @@ class Settings:
         return self.project_root / "metrics" / "metrics.json"
 
     @property
+    def slices_path(self) -> Path:
+        return self.project_root / "metrics" / "slices.json"
+
+    @property
+    def baseline_path(self) -> Path:
+        """The recorded champion's metrics (committed; refreshed from the registry)."""
+        return self.project_root / "metrics" / "baseline.json"
+
+    @property
+    def validation_path(self) -> Path:
+        return self.project_root / "reports" / "validation.json"
+
+    @property
+    def gate_path(self) -> Path:
+        return self.project_root / "reports" / "gate.json"
+
+    @property
     def params_path(self) -> Path:
         return self.project_root / "params.yaml"
 

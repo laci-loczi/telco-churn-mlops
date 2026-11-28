@@ -1,14 +1,20 @@
 """Command-line entry point: `uv run python src/main.py <command>`.
 
 Pipeline stages (what dvc.yaml runs; each also works by hand):
-    prepare         clean + stratified split -> data/processed/{train,test}.csv
+    validate        ingestion contract -> reports/validation.json (exit 1 on failure)
+    prepare         model-input contract, clean + split -> data/processed/{train,test}.csv
     train           fit -> models/model.joblib, log an MLflow run -> models/run.json
-    evaluate        test metrics -> metrics/metrics.json, logged onto the same run
+    evaluate        metrics/metrics.json + metrics/slices.json, logged onto the same run
+    gate            acceptance criteria -> reports/gate.json (exit 1 on NO-GO)
 
 Everything else:
     make-data --version {1,2}   build a dataset version from the IBM download
     sweep                       log one MLflow run per hyperparameter setting
-    register                    register the pipeline run's model + set the alias
+    register                    register the model + set the alias (only on a GO)
+    baseline                    refresh metrics/baseline.json from the @alias champion
+    measure                     the numbers the thresholds are derived from
+    demo-data-gate              plant bad rows, show dvc repro refusing, restore
+    demo-model-gate             make the model worse, show gate + register refusing, restore
     runs-for-data [--md5 MD5]   list runs trained on a data version (default: current)
     chain                       walk alias -> version -> run -> commit -> data md5
 """
@@ -22,10 +28,70 @@ import sys
 from .config import load_settings
 
 
+def cmd_validate(settings, args) -> None:
+    from .pipeline import GateRefused, validate
+    from .validation import format_validation
+
+    try:
+        report = validate(settings)
+    except GateRefused:
+        print(format_validation(json.loads(settings.validation_path.read_text(encoding="utf-8"))))
+        raise
+    print(format_validation(report))
+
+
 def cmd_prepare(settings, args) -> None:
     from .pipeline import prepare
 
     print(json.dumps(prepare(settings), indent=2))
+
+
+def cmd_gate(settings, args) -> None:
+    from .gates import format_gate
+    from .pipeline import GateRefused, gate
+
+    report = gate(settings)
+    print(format_gate(report))
+    if report["verdict"] != "GO":
+        raise GateRefused("model gate: NO-GO")
+
+
+def cmd_baseline(settings, args) -> None:
+    from .registry import refresh_baseline
+
+    baseline = refresh_baseline(settings)
+    src = baseline["source"]
+    print(f"metrics/baseline.json <- {src['model']}@{src['alias']} "
+          f"(version {src['version']}, run {src['run_id']})")
+    print(json.dumps(baseline["metrics"], indent=2))
+
+
+def cmd_measure(settings, args) -> None:
+    import joblib
+    import pandas as pd
+
+    from .data import features_and_target
+    from .measure import bootstrap, trivial_predictors
+
+    test = pd.read_csv(settings.processed_dir / "test.csv", dtype={"SeniorCitizen": str})
+    x, y = features_and_target(test)
+    model = joblib.load(settings.model_path)
+    print(f"test set: {len(y)} rows, {int(y.sum())} churners ({y.mean():.4f})")
+    print("trivial predictors:", json.dumps(trivial_predictors(y), indent=2))
+    print("bootstrap (1000 resamples) of the current model:",
+          json.dumps(bootstrap(y, model.predict(x), model.predict_proba(x)[:, 1]), indent=2))
+
+
+def cmd_demo_data_gate(settings, args) -> None:
+    from .demos import demo_data_gate
+
+    sys.exit(demo_data_gate(settings))
+
+
+def cmd_demo_model_gate(settings, args) -> None:
+    from .demos import demo_model_gate
+
+    sys.exit(demo_model_gate(settings))
 
 
 def cmd_train(settings, args) -> None:
@@ -69,6 +135,7 @@ def cmd_register(settings, args) -> None:
 
     result = register(settings)
     state = "already registered as" if result["already_registered"] else "registered as"
+    print(result["reason"])
     print(f"run {result['run_id']} {state} {result['name']} version {result['version']}")
     print(f"alias @{result['alias']} -> version {result['version']}")
 
@@ -108,12 +175,18 @@ def cmd_chain(settings, args) -> None:
 
 
 COMMANDS = {
+    "validate": cmd_validate,
     "prepare": cmd_prepare,
     "train": cmd_train,
     "evaluate": cmd_evaluate,
+    "gate": cmd_gate,
     "make-data": cmd_make_data,
     "sweep": cmd_sweep,
     "register": cmd_register,
+    "baseline": cmd_baseline,
+    "measure": cmd_measure,
+    "demo-data-gate": cmd_demo_data_gate,
+    "demo-model-gate": cmd_demo_model_gate,
     "runs-for-data": cmd_runs_for_data,
     "chain": cmd_chain,
 }
@@ -136,7 +209,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--version", type=int, default=2, help="make-data: dataset version")
     parser.add_argument("--md5", help="runs-for-data: the data md5 (default: current pointer)")
     args = parser.parse_args(argv)
-    COMMANDS[args.command](load_settings(), args)
+    from .pipeline import GateRefused
+    from .registry import PublishRefused
+
+    try:
+        COMMANDS[args.command](load_settings(), args)
+    except (GateRefused, PublishRefused) as refusal:
+        # A refusal is an answer, not a crash: one clear line and a non-zero exit,
+        # which is what makes `dvc repro` stop. Flush stdout first so the report
+        # prints before the refusal line.
+        sys.stdout.flush()
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

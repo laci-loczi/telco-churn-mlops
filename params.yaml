@@ -15,3 +15,69 @@ train:
   # random forest
   n_estimators: 200
   max_depth: 8
+
+# Slices: computed on the raw test-set columns (see evaluation.py). Each group
+# row carries n and its positive (churn) count.
+evaluation:
+  slices:
+    # Retention offers are priced by contract; churn is 43% / 11% / 3%.
+    contract:
+      column: Contract
+      order: [Month-to-month, One year, Two year]
+    # The first year is where churn concentrates: 47% churn at 0-12m vs 8% at 49-72m.
+    tenure_band:
+      column: tenure
+      bins: [0, 12, 48, 72]
+      labels: [0-12m, 13-48m, 49-72m]
+      order: [0-12m, 13-48m, 49-72m]
+    # Age: the one sensitive attribute with a clear business and fairness stake.
+    senior_citizen:
+      column: SeniorCitizen
+      labels: {"0": non_senior, "1": senior}
+      order: [non_senior, senior]
+    # Sensitive attribute; reported for fairness, not expected to matter.
+    gender:
+      column: gender
+      order: [Female, Male]
+  # Axes whose selection-rate and TPR gaps are computed into slices.json.
+  fairness_axes: [senior_citizen, gender]
+
+# The model gate. Every number is derived from a measurement in docs/hw2.md
+# (`uv run python src/main.py measure`). Bump criteria_version on any change.
+acceptance:
+  criteria_version: "1.0.0"
+
+  # Absolute floors. Current model: roc_auc 0.8461, f1 0.6284, recall 0.7966.
+  # Trivial predictors: always-churn f1 0.4192, always-stays recall 0; any
+  # constant scores roc_auc 0.5. Every floor sits ~4-5 bootstrap std below the
+  # current value and well above the trivial ones.
+  minimum:
+    roc_auc: 0.80
+    f1: 0.55
+    recall: 0.70
+
+  # Against the champion in metrics/baseline.json (from the @staging alias).
+  # 0.01 ~ one bootstrap std of roc_auc (0.0095) on this 1,761-row test set.
+  regression:
+    primary_metric: roc_auc
+    max_drop: 0.01
+    # No baseline -> the check is skipped AND the verdict is NO-GO.
+    require_baseline: true
+
+  # A group is scored only with >= 100 rows and >= 30 churners: below that its
+  # F1 bootstrap std is > 0.07 (One-year, 43 churners: 0.068). Gated groups fail
+  # below F1 0.20 or more than 0.40 below the aggregate F1. The current worst
+  # scored group is One-year (F1 0.2632, gap 0.3652): a known weakness, and the
+  # rule exists to catch it getting worse, not to pretend it is fine.
+  slice_rules:
+    min_support: 100
+    min_positives: 30
+    min_f1: 0.20
+    max_f1_gap: 0.40
+
+  # Equal opportunity across age: churners must be found at similar rates.
+  # Measured senior TPR gap 0.1977 (bootstrap std 0.031); 0.25 allows ~1.7 std.
+  # The selection-rate gap (0.3321) and the gender gaps are reported only.
+  fairness:
+    senior_citizen:
+      max_tpr_gap: 0.25

@@ -18,6 +18,10 @@ from .model import build_model, evaluate_model, model_params
 from .tracking import lineage_tags, mlflow_available, use_experiment
 
 
+class GateRefused(RuntimeError):
+    """A gate said no. The CLI turns this into a non-zero exit, so `dvc repro` stops."""
+
+
 def _write_json(path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # newline="\n": byte-identical on every OS, so dvc.lock's md5 holds.
@@ -36,10 +40,37 @@ def _read_split(settings: Settings, name: str) -> pd.DataFrame:
                        dtype={"SeniorCitizen": str})
 
 
+# ── stage 0: validate (the data gate) ────────────────────────────────────────
+def validate(settings: Settings) -> dict:
+    """Run the ingestion contract on the raw file and write the verdict.
+
+    The verdict is written on failure too (that is the report you debug from);
+    then GateRefused makes the stage exit non-zero. `prepare` lists
+    reports/validation.json in its deps, so it never runs on refused data.
+    """
+    from .schemas import IngestionSchema
+    from .validation import validate_frame
+
+    report = validate_frame(IngestionSchema, load_raw(settings.data_path))
+    _write_json(settings.validation_path, report)
+    if not report["valid"]:
+        raise GateRefused(f"data contract failed: {report['failing_checks']} check(s)")
+    return report
+
+
 # ── stage 1: prepare ─────────────────────────────────────────────────────────
 def prepare(settings: Settings) -> dict:
+    from .schemas import ModelInputSchema
+    from .validation import validate_frame
+
+    verdict = json.loads(settings.validation_path.read_text(encoding="utf-8"))
+    if not verdict.get("valid"):
+        raise GateRefused("reports/validation.json is not a pass — refusing to prepare")
     params = load_params(settings)
     df = clean(load_raw(settings.data_path))
+    model_input = validate_frame(ModelInputSchema, df)
+    if not model_input["valid"]:
+        raise GateRefused(f"model-input contract failed: {model_input['failures']}")
     train_df, test_df = split(df, params["prepare"]["test_size"], params["random_seed"])
     _write_csv(train_df, settings.processed_dir / "train.csv")
     _write_csv(test_df, settings.processed_dir / "test.csv")
@@ -91,10 +122,24 @@ def train(settings: Settings) -> dict:
 
 # ── stage 3: evaluate ────────────────────────────────────────────────────────
 def evaluate(settings: Settings) -> dict:
+    from .evaluation import rate_gaps, slice_report
+
+    params = load_params(settings)
     model = joblib.load(settings.model_path)
-    x_test, y_test = features_and_target(_read_split(settings, "test"))
+    test = _read_split(settings, "test")
+    x_test, y_test = features_and_target(test)
     metrics = evaluate_model(model, x_test, y_test)
     _write_json(settings.metrics_path, metrics)
+
+    evaluation = params.get("evaluation", {})
+    rules = params.get("acceptance", {}).get("slice_rules", {})
+    slices = slice_report(test, y_test, model.predict(x_test), evaluation.get("slices", {}))
+    fairness = {
+        axis: rate_gaps(slices[axis], int(rules.get("min_support", 0)),
+                        int(rules.get("min_positives", 0)))
+        for axis in evaluation.get("fairness_axes", []) if axis in slices
+    }
+    _write_json(settings.slices_path, {"slices": slices, "fairness": fairness})
 
     run_id = json.loads(settings.run_info_path.read_text(encoding="utf-8")).get("run_id")
     if run_id and mlflow_available(settings):
@@ -104,6 +149,32 @@ def evaluate(settings: Settings) -> dict:
         for key, value in metrics.items():
             client.log_metric(run_id, key, value)
     return {"metrics": metrics, "run_id": run_id}
+
+
+# ── stage 4: gate (the model gate) ───────────────────────────────────────────
+def _read_json(path) -> dict | None:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def gate(settings: Settings) -> dict:
+    """Gather the inputs, call the pure gate function, write the verdict.
+
+    The verdict is written for a NO-GO too, and the model is left in place:
+    you need the artifact to find out why it failed. Refusal happens here (non-
+    zero exit) and in `register`, which reads this verdict.
+    """
+    from .gates import evaluate_gate
+
+    params = load_params(settings)
+    report = evaluate_gate(
+        metrics=_read_json(settings.metrics_path) or {},
+        slices=_read_json(settings.slices_path) or {},
+        baseline=_read_json(settings.baseline_path),
+        acceptance=params.get("acceptance", {}),
+        run_id=(_read_json(settings.run_info_path) or {}).get("run_id"),
+    )
+    _write_json(settings.gate_path, report)
+    return report
 
 
 # ── hyperparameter sweep (outside DVC: comparison runs, not the pipeline) ────
