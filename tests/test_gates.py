@@ -115,3 +115,9 @@ def test_the_verdict_is_deterministic_and_has_no_timestamp():
 ])
 def test_publish_requires_a_go_for_this_exact_run(report, run_id, allowed):
     assert publish_decision(report, run_id)[0] is allowed
+
+
+def test_a_no_go_is_the_reason_given_even_when_other_things_are_wrong():
+    allowed, reason = publish_decision(
+        {"verdict": "NO-GO", "run_id": None, "reasons": ["floor.recall"]}, None)
+    assert not allowed and "NO-GO" in reason and "floor.recall" in reason

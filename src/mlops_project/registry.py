@@ -15,18 +15,19 @@ def publish_decision(gate_report: dict | None, run_id: str | None) -> tuple[bool
     """May the model of `run_id` be published? A pure function, tested directly.
 
     Only a GO recorded for THIS run counts: a GO left over from an earlier run
-    says nothing about the model now in models/.
+    says nothing about the model now in models/. The verdict is checked first,
+    so a NO-GO is always the reason given when it applies.
     """
-    if not run_id:
-        return False, "models/run.json has no run_id (was MLflow up during `dvc repro`?)"
     if gate_report is None:
         return False, "no recorded verdict (reports/gate.json missing) — run `dvc repro`"
-    if gate_report.get("run_id") != run_id:
-        return False, (f"reports/gate.json is for run {gate_report.get('run_id')}, not the "
-                       f"current model {run_id} — run `dvc repro`")
     if gate_report.get("verdict") != "GO":
         reasons = "; ".join(gate_report.get("reasons", [])) or "unknown"
         return False, f"gate verdict is {gate_report.get('verdict')}: {reasons}"
+    if not run_id:
+        return False, "models/run.json has no run_id (was MLflow up during `dvc repro`?)"
+    if gate_report.get("run_id") != run_id:
+        return False, (f"reports/gate.json is for run {gate_report.get('run_id')}, not the "
+                       f"current model {run_id} — run `dvc repro`")
     return True, f"gate GO (criteria {gate_report.get('criteria_version')})"
 
 

@@ -5,8 +5,9 @@ their demographics, account and services: binary classification of `Churn` on th
 Customer Churn dataset (7,043 customers, 21 columns). See [docs/proposal.md](docs/proposal.md)
 and [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md).
 
-This repository grows across HW1–HW5 ([HOMEWORK.md](HOMEWORK.md)). HW1 evidence:
-[docs/hw1.md](docs/hw1.md).
+This repository grows across HW1–HW5 ([HOMEWORK.md](HOMEWORK.md)). Evidence:
+[docs/hw1.md](docs/hw1.md) (data versioning, tracking) and [docs/hw2.md](docs/hw2.md)
+(validation and evaluation gates).
 
 ## What is where
 
@@ -15,8 +16,11 @@ This repository grows across HW1–HW5 ([HOMEWORK.md](HOMEWORK.md)). HW1 evidenc
 | `compose.yaml`, `mlflow.Dockerfile` | Postgres + Silo + MLflow |
 | `.env.example` | configuration template (copy to `.env`, which is git-ignored) |
 | `data/telco_churn.csv.dvc` | DVC pointer to the dataset (the CSV itself is not in Git) |
-| `dvc.yaml`, `dvc.lock`, `params.yaml` | the pipeline `prepare -> train -> evaluate`, its lock, its hyperparameters |
-| `metrics/metrics.json` | committed test metrics of the current pipeline model |
+| `dvc.yaml`, `dvc.lock`, `params.yaml` | the pipeline `validate -> prepare -> train -> evaluate -> gate`, its lock, its hyperparameters, slices and `acceptance` criteria |
+| `src/mlops_project/schemas.py` | the two Pandera contracts (ingestion, model input) |
+| `reports/validation.json`, `reports/gate.json` | the data and model verdicts (committed) |
+| `metrics/metrics.json`, `metrics/slices.json` | committed aggregate and per-slice test metrics |
+| `metrics/baseline.json` | the recorded champion (`@staging`) the gate compares against |
 | `models/run.json` | the MLflow run id of the current pipeline model (committed) |
 | `src/mlops_project/` | the code; `src/main.py` is the CLI entry point |
 | `tests/` | unit tests (no dataset and no Docker needed) |
@@ -54,7 +58,8 @@ docker compose up -d --wait            # postgres, s3 (Silo), mlflow all healthy
 
 # 4. data + pipeline
 uv run dvc pull                        # fetch the dataset (and cached outputs) from Silo
-uv run dvc repro                       # prepare -> train -> evaluate (up to date after a pull)
+uv run dvc repro                       # validate -> ... -> gate; ends in GO (up to date after a pull)
+cat reports/gate.json                  # verdict, criteria_version, summary.skipped
 uv run dvc metrics show
 uv run dvc dag
 ```
@@ -69,6 +74,20 @@ PowerShell instead of step 2:
 Copy-Item .env.example .env
 Get-Content .env | Where-Object { $_ -match '^\s*[^#\s].*=' } | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Item "env:$($k.Trim())" $v.Trim() }
 ```
+
+### The gates (HW2)
+
+The stack must be up, and both demos need a clean, committed working tree (they restore it at
+the end):
+
+```bash
+uv run python src/main.py demo-data-gate   # plant bad rows -> dvc repro stops at validate -> restore
+uv run python src/main.py demo-model-gate  # worse model -> gate NO-GO, register refuses -> restore
+uv run python src/main.py baseline         # refresh metrics/baseline.json from the @staging alias
+uv run python src/main.py measure          # the numbers behind every threshold (docs/hw2.md)
+```
+
+`register` publishes only when `reports/gate.json` is a GO for the model in `models/run.json`.
 
 ### Other commands
 
