@@ -1,0 +1,7 @@
+{
+  "contract": "IngestionSchema",
+  "failing_checks": 0,
+  "failures": [],
+  "rows": 7043,
+  "valid": true
+}
